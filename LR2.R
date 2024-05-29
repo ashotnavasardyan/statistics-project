@@ -2,6 +2,7 @@ library(readr)
 library(dplyr)
 library(purrr)
 library(stringr)
+library(ggplot2)
 
 extract_vector_values <- function(vector_string) {
   av_pattern <- "/AV:([NALP])"
@@ -129,31 +130,15 @@ print(coefficients(model))
 mse <- mean((y_pred - Y_test)^2)
 cat("MSE: ", mse)
 
+})
 
-library(ggplot2)
-
-# Combine test data and predictions for plotting
 plot_data <- data.frame(Y_test = Y_test, Y_pred = y_pred)
 
-# Assuming X_test has one predictor variable for simplicity in plotting
-# If there are multiple predictors, choose one for plotting, e.g., X_test[,1]
 ggplot(plot_data, aes(x = Y_test, y = Y_pred)) +
-  geom_point() +                      # Scatter plot of actual vs predicted
-  geom_abline(slope = 1, intercept = 0, color = "red") +  # Line y = x for reference
+  geom_point() +                     
+  geom_abline(slope = 1, intercept = 0, color = "red") +
   labs(title = "Regression Line and Data Points",
        x = "Actual Values (Y_test)",
        y = "Predicted Values (y_pred)") +
   theme_minimal()
 
-residuals <- Y_test - y_pred
-
-# # Plot residuals
-# ggplot(plot_data, aes(x = Y_test, y = residuals)) +
-#   geom_point() +
-#   geom_hline(yintercept = 0, color = "red") +
-#   labs(title = "Residual Plot",
-#        x = "Actual Values (Y_test)",
-#        y = "Residuals") +
-#   theme_minimal()
-
-})
