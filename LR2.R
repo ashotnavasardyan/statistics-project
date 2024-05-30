@@ -32,6 +32,49 @@ extract_vector_values <- function(vector_string) {
   return(c(av_value, ac_value, pr_value, ui_value, c_value, i_value, a_value))
 }
 
+forward_selection <- function(X_train, Y_train, X_test, Y_test, metric = "mse") {
+  n_features <- ncol(X_train)
+  selected_features <- c()
+  remaining_features <- 1:n_features
+  
+  while (length(selected_features) < n_features) {
+    best_score <- Inf
+    best_feature <- NULL
+    results_list <- list()
+
+    for (feature in remaining_features) {
+      features_to_try <- c(selected_features, feature)
+      
+      lm_model <- lm(Y_train ~ ., data = X_train[, features_to_try, drop = FALSE])
+      
+      predictions <- predict(lm_model, newdata = X_test[, features_to_try, drop = FALSE])
+      
+      if (metric == "mse") {
+        error <- mean((predictions - Y_test)^2)
+      } else if (metric == "mae") {
+        error <- mean(abs(predictions - Y_test))
+      } else if (metric == "rmse") {
+        error <- sqrt(mean((predictions - Y_test)^2))
+      }
+
+      if (error < best_score) {
+        best_score <- error
+        best_feature <- feature
+      }
+    }
+    
+    selected_features <- c(selected_features, best_feature)
+    remaining_features <- remaining_features[remaining_features != best_feature]
+    
+    # cat("Selected feature:", names(X_train)[best_feature], "\n")
+    # cat("Current best error (", metric, "):", best_score, "\n")
+  }
+  
+  return(list(features = selected_features, error = best_score))
+}
+
+
+  
 convert_to_severity <- function(base_score) {
   if (base_score == 0.0) {
     return('NONE')
@@ -46,37 +89,56 @@ convert_to_severity <- function(base_score) {
   }
 }
 
+demonstrate_results <- function(model,metric,error, X_test, Y_test){
+  y_pred <- predict(model, newdata = X_test)
+  
+  # print("Data before transformation:")
+  # print(X_precode[1:10, ])
+  # print("Data after transformation:")
+  # print(X[1:10, ])
+  
+    
+  cat("Error (", metric, "):", error, "\n")
+    
+  
+  plot_data <- data.frame(Y_test = Y_test, Y_pred = y_pred)
+  
+  ggplot(plot_data, aes(x = Y_test, y = Y_pred)) +
+    geom_point() +                     
+    geom_abline(slope = 1, intercept = 0, color = "red") +
+    labs(title = "Regression Line and Data Points",
+         x = "Actual Values (Y_test)",
+         y = "Predicted Values (y_pred)") +
+    theme_minimal()
+}
+
+
 file_path <- "Data/cve_data_2014-24.csv"
 data <- read_csv(file_path)
 data <- data %>%
   mutate(year = str_split(cveId, "-") %>% map_chr(2))
 data <- data %>%
   filter(!is.na(assignerShortName) & !is.na(baseSeverity) & assignerShortName != "" & baseSeverity != "")
- 
-# MSE : 2.76 :(
-#features <-c("AV", "AC", "PR", "UI")
-# MSE : 0.76
-# features <-c("AV", "AC", "C", "I", "A") 
-# MSE : 0.85
-# features <-c("AV", "C", "I", "A") 
-# MSE : 1.1
-# features <-c("C", "I", "A") 
-# MSE : 0.74
-# features <-c("AC", "PR","C", "I", "A") 
-# MSE : 0.84
-# features <-c("PR","C", "I", "A")
-# MSE : 0.52
-features <-c("AC", "AV", "PR","C", "I", "A") 
 
-data_2023 <- data[data$year == '2023', ]
-vectorStringmatrix <- as.matrix(data_2023$vectorString)
+features <-c("AC", "AV", "PR","UI","C", "I", "A") 
+
+#data <- data[data$year == '2023', ]
+#years <- c("2021", "2022", "2023")
+years <- c("2023")
+data <- data[data$year %in% years, ]
+
+vectorStringmatrix <- as.matrix(data$vectorString)
 vector_values <- apply(vectorStringmatrix, 1, function(x) unlist(extract_vector_values(x)))
 transposed_matrix <- t(vector_values)
 colnames(transposed_matrix) <- c("AV", "AC", "PR", "UI", "C", "I", "A")
 transposed_matrix <- transposed_matrix[,features]
 X <- transposed_matrix
 X_precode <- X
-Y <- data_2023['baseScore']
+Y <- data['baseScore']
+
+complete_rows <- complete.cases(X)
+X <- X[complete_rows, , drop = FALSE]
+Y <- Y[complete_rows, , drop = FALSE]
 
 mapping <- list(
   AV = c('N' = 4, 'A' = 3, 'L' = 2, 'P' = 1),
@@ -96,49 +158,81 @@ for (i in 1:nrow(X)) {
   }
 }
 
-set.seed(42)
+set.seed(50)
 train_indices <- sample(1:nrow(X), 0.9 * nrow(X))
 X_train <- X[train_indices, ]
 Y_train <- Y[train_indices,]
 X_test <- X[-train_indices, ]
 Y_test <- Y[-train_indices,]
-Y_test_char <- data_2023[-train_indices,'baseSeverity']
+Y_test_char <- data[-train_indices,'baseSeverity']
 
 X_train <- as.data.frame(X_train)
 X_test <- as.data.frame(X_test)
 Y_train <- as.matrix(Y_train)
 Y_test <- as.matrix(Y_test)
 
-model <- lm(Y_train ~ ., data = X_train)
+suppressMessages({
+result_mse <- forward_selection(X_train, Y_train, X_test, Y_test, metric = "mse")
+cat("Final selected features (MSE):", names(X_train)[result_mse$features], "\n")
+lm_model_mse <- lm(Y_train ~ ., data = X_train[, result_mse$features, drop = FALSE])
+demonstrate_results(lm_model_mse,"MSE",result_mse$error, X_test, Y_test)
 
-y_pred <- predict(model, newdata = X_test)
-y_pred_matrix <- as.matrix(y_pred)
-y_pred_matrix <- as.matrix(Y_test_char)
-# Map continuous predictions to categorical values
+result_mae <- forward_selection(X_train, Y_train, X_test, Y_test, metric = "mae")
+cat("Final selected features (MAE):", names(X_train)[result_mae$features], "\n")
+lm_model_mae <- lm(Y_train ~ ., data = X_train[, result_mae$features, drop = FALSE])
+demonstrate_results(lm_model_mae,"MAE",result_mae$error, X_test, Y_test)
 
-# Calculate accuracy
-invisible({
-# Print results
-print("Data before transformation:")
-print(X_precode[1:10, ])
-print("Data after transformation:")
-print(X[1:10, ])
-
-cat("Coefficients:\n")
-print(coefficients(model))
-
-mse <- mean((y_pred - Y_test)^2)
-cat("MSE: ", mse)
-
+result_rmse <- forward_selection(X_train, Y_train, X_test, Y_test, metric = "rmse")
+cat("Final selected features (RMSE):", names(X_train)[result_rmse$features], "\n")
+lm_model_rmse <- lm(Y_train ~ ., data = X_train[, result_rmse$features, drop = FALSE])
+demonstrate_results(lm_model_mse, "RMSE",result_rmse$error, X_test, Y_test)
 })
 
-plot_data <- data.frame(Y_test = Y_test, Y_pred = y_pred)
+#install.packages("caret")
+#install.packages("randomForest")
 
-ggplot(plot_data, aes(x = Y_test, y = Y_pred)) +
-  geom_point() +                     
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  labs(title = "Regression Line and Data Points",
-       x = "Actual Values (Y_test)",
-       y = "Predicted Values (y_pred)") +
-  theme_minimal()
+#################################
+# library(caret)
+# library(randomForest)
+# library(ggplot2)
+# 
+# # Set seed for reproducibility
+# 
+# control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
+# 
+# # Perform RFE
+# Y_train <- as.vector(Y_train)  # Convert Y_train to a vector
+# Y_test <- as.vector(Y_test)    # Convert Y_test to a vector
+# rfe_results <- rfe(X_train, Y_train, sizes = c(1:7), rfeControl = control)
+# # Selected features
+# selected_features <- predictors(rfe_results)
+# print(paste("Selected Features:", paste(selected_features, collapse = ", ")))
+# 
+# # Subset training and testing data with selected features
+# X_train_selected <- X_train[, selected_features]
+# X_test_selected <- X_test[, selected_features]
+# 
+# # Fit RandomForest with selected features
+# rf_model <- randomForest(X_train_selected, Y_train)
+# 
+# # Feature importances
+# importances <- importance(rf_model)
+# importance_df <- data.frame(Feature = rownames(importances), Importance = importances[, 1])
+# importance_df <- importance_df[order(-importance_df$Importance), ]
+# 
+# print("Feature Importances:")
+# print(importance_df)
+# 
+# # Plot feature importances
+# ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+#   geom_bar(stat = "identity") +
+#   coord_flip() +
+#   xlab("Features") +
+#   ylab("Importance") +
+#   ggtitle("Feature Importances (Random Forest - Selected Features)") +
+#   theme_minimal()
+
+# https://towardsdatascience.com/effective-feature-selection-recursive-feature-elimination-using-r-148ff998e4f7
+
+
 
