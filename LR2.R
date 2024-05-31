@@ -3,6 +3,8 @@ library(dplyr)
 library(purrr)
 library(stringr)
 library(ggplot2)
+library(caret)
+library(randomForest)
 
 extract_vector_values <- function(vector_string) {
   av_pattern <- "/AV:([NALP])"
@@ -92,10 +94,10 @@ convert_to_severity <- function(base_score) {
 demonstrate_results <- function(model,metric,error, X_test, Y_test){
   y_pred <- predict(model, newdata = X_test)
   
-  # print("Data before transformation:")
-  # print(X_precode[1:10, ])
-  # print("Data after transformation:")
-  # print(X[1:10, ])
+  print("Data before transformation:")
+  print(X_precode[1:10, ])
+  print("Data after transformation:")
+  print(X[1:10, ])
   
     
   cat("Error (", metric, "):", error, "\n")
@@ -192,47 +194,50 @@ demonstrate_results(lm_model_mse, "RMSE",result_rmse$error, X_test, Y_test)
 #install.packages("randomForest")
 
 #################################
-# library(caret)
-# library(randomForest)
-# library(ggplot2)
-# 
-# # Set seed for reproducibility
-# 
-# control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
-# 
-# # Perform RFE
-# Y_train <- as.vector(Y_train)  # Convert Y_train to a vector
-# Y_test <- as.vector(Y_test)    # Convert Y_test to a vector
-# rfe_results <- rfe(X_train, Y_train, sizes = c(1:7), rfeControl = control)
-# # Selected features
-# selected_features <- predictors(rfe_results)
-# print(paste("Selected Features:", paste(selected_features, collapse = ", ")))
-# 
-# # Subset training and testing data with selected features
-# X_train_selected <- X_train[, selected_features]
-# X_test_selected <- X_test[, selected_features]
-# 
-# # Fit RandomForest with selected features
-# rf_model <- randomForest(X_train_selected, Y_train)
-# 
-# # Feature importances
-# importances <- importance(rf_model)
-# importance_df <- data.frame(Feature = rownames(importances), Importance = importances[, 1])
-# importance_df <- importance_df[order(-importance_df$Importance), ]
-# 
-# print("Feature Importances:")
-# print(importance_df)
-# 
-# # Plot feature importances
-# ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
-#   geom_bar(stat = "identity") +
-#   coord_flip() +
-#   xlab("Features") +
-#   ylab("Importance") +
-#   ggtitle("Feature Importances (Random Forest - Selected Features)") +
-#   theme_minimal()
+
+
+control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
+
+Y_train <- as.vector(Y_train)
+Y_test <- as.vector(Y_test)
+rfe_results <- rfe(X_train, Y_train, sizes = c(1:7), rfeControl = control)
+selected_features <- predictors(rfe_results)
+print(paste("Selected Features:", paste(selected_features, collapse = ", ")))
+
+X_train_selected <- X_train[, selected_features]
+X_test_selected <- X_test[, selected_features]
+
+rf_model <- randomForest(X_train_selected, Y_train)
+
+importances <- importance(rf_model)
+importance_df <- data.frame(Feature = rownames(importances), Importance = importances[, 1])
+importance_df <- importance_df[order(-importance_df$Importance), ]
+
+print("Feature Importances:")
+print(importance_df)
+
+ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "#5584F9") +
+  coord_flip() +
+  xlab("Features") +
+  ylab("Importance") +
+  ggtitle("Feature Importances (Random Forest - Selected Features)") +
+  theme_minimal()
 
 # https://towardsdatascience.com/effective-feature-selection-recursive-feature-elimination-using-r-148ff998e4f7
 
+Y_pred <- predict(rf_model, X_test_selected)
 
+results_df <- data.frame(Actual = Y_test, Predicted = Y_pred)
 
+ggplot(results_df, aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red") +
+  xlab("Actual Values") +
+  ylab("Predicted Values") +
+  ggtitle("Actual vs Predicted Values (Random Forest)") +
+  theme_minimal()
+
+mse <- mean((Y_pred - Y_test)^2)
+
+print(paste("Mean Squared Error (MSE):", mse))
