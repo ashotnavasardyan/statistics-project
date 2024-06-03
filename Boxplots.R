@@ -4,9 +4,7 @@ library(tidyverse)
 file_path <- "Data/cve_data_2014-24.csv"
 data <- read_csv(file_path)
 
-blacklist <- c('Mitre', 'VulnDB', 'GitHub_M', 'PatchStack', 'VulDB', '@huntrdev', 'wordfence', 'WPScan', 'Talos', 'CERTVDE', 'ICS-CERT', 'TR-CERT', 'Snyk', 'HackerOne', 'Tenable')
 
-filtered_data <- data[!tolower(data$assignerShortName) %in% tolower(blacklist), ]
 data <- filtered_data %>%
   filter(!is.na(assignerShortName) & !is.na(baseSeverity) & assignerShortName != "" & baseSeverity != "")
 
