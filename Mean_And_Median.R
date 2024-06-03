@@ -5,10 +5,6 @@ library(purrr)
 file_path <- "Data/cve_data_2014-24.csv"
 data <- read_csv(file_path)
 
-blacklist <- c('Mitre', 'VulnDB', 'GitHub_M', 'PatchStack', 'VulDB', '@huntrdev', 'wordfence', 'WPScan', 'Talos', 'CERTVDE', 'ICS-CERT', 'TR-CERT', 'Snyk', 'HackerOne', 'Tenable')
-
-
-filtered_data <- data[!tolower(data$assignerShortName) %in% tolower(blacklist), ]
 data <- filtered_data %>%
   filter(!is.na(assignerShortName) & !is.na(baseSeverity) & assignerShortName != "" & baseSeverity != "")
 
@@ -26,10 +22,11 @@ grouped_data$year <- as.numeric(grouped_data$year)
 
 
 ggplot(grouped_data, aes(x = year)) +
-  geom_line(aes(y = median), color = "blue", size = 1) +
-  geom_line(aes(y = mean), color = "red", size = 1) +
-  labs(x = "Year", y = "BaseScore", title = "Median and Mean BaseScore Over Time") +
+  geom_line(aes(y = median, color = "Median"), size = 1) +
+  geom_line(aes(y = mean, color = "Mean"), size = 1) +
+  labs(x = "Year", y = "BaseScore", title = "Median and Mean BaseScore Over Time", color = "Legend") +
   ylim(0, 10) +
   scale_x_continuous(breaks = seq(2016, 2024, by = 1)) +
+  scale_color_manual(values = c("Median" = "blue", "Mean" = "red")) +
   theme_minimal()
 
